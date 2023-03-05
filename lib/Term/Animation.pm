@@ -237,6 +237,12 @@ sub _set_colors {
 		$self->{COLORS}{$f} = COLOR_PAIR($cid);
 		$cid++;
 	}
+	for my $c ('a'..'z') {
+		my $cidx = ord($c)-97;
+		init_pair($cid, $cidx, $bg);
+		$self->{COLOR2}{$c} = COLOR_PAIR($cid);
+		$cid++;
+	}
 }
 
 =item I<color_name>
@@ -286,6 +292,18 @@ or a valid color id ('b').
 sub is_valid_color {
 	my ($color) = @_;
 	return(defined($color_ids->{$color}));
+}
+
+=item I<is_valid_color2>
+  my $is_valid = $anim->is_valid_color2($color2_name);
+Returns true if the supplied string is a valid color2 name ('i')
+or a valid color2 id ('i').
+=cut
+sub is_valid_color2 {
+	my ($color) = @_;
+	#return(defined($color2_ids->{$color}));
+	return $color =~ /^[a-z]$/ ? 1 : 0;
+
 }
 
 =item I<color>
@@ -532,8 +550,16 @@ sub _draw_entity {
 
 	# a few temporary variables to make the code below easier to read
 	my $shape   = $entity->{SHAPE}[$entity->{CURR_FRAME}];
-	my $colors  = $self->{COLORS};
-	my $fg      = $entity->{COLOR}[$entity->{CURR_FRAME}];
+	my $colors;
+	my $fg;
+	if (defined $self->{COLOR2}) {
+		$colors = $self->{COLOR2};
+		$fg = $entity->{COLOR2}[$entity->{CURR_FRAME}];
+	}
+	else {
+		$colors = $self->{COLORS};
+		$fg = $entity->{COLOR}[$entity->{CURR_FRAME}];
+	}
 	my $attrs   = $entity->{ATTR}[$entity->{CURR_FRAME}];
 	my ($x, $y) = ($entity->{'X'}, $entity->{'Y'});
 	my ($w, $h) = ($self->{WIDTH}, $self->{HEIGHT});
@@ -564,7 +590,6 @@ sub _draw_entity {
 						} else {
 							$attr = $colors->{$fg->[$i][$j]};
 						}
-
 						$win->attron( $attr );
 						$win->addstr( int($y_pos), int($x_pos), $shape->[$i][$j]);
 						$win->attroff( $attr );
@@ -1008,9 +1033,9 @@ sub end {
 # write to a log file, for debugging
 sub _elog {
 	my ($mesg) = @_;
-	open(F, ">>", "elog.log");
-	print F "$mesg\n";
-	close(F);
+	open(my $F, ">>", "elog.log") or die "Could not open debug log file: $!";
+	print $F "$mesg\n";
+	close($F);
 }
 
 1;
