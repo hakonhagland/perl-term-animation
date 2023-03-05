@@ -288,6 +288,20 @@ sub is_valid_color {
 	return(defined($color_ids->{$color}));
 }
 
+=item I<is_valid_color2>
+
+  my $is_valid = $anim->is_valid_color2($color2_name);
+
+Returns true if the supplied string is a valid color2 name ('i')
+or a valid color2 id ('i').
+
+=cut
+sub is_valid_color2 {
+	my ($color) = @_;
+	#return(defined($color2_ids->{$color}));
+	return $color =~ /^(?:u|i)$/ ? 1 : 0;
+}
+
 =item I<color>
 
   my $state = $anim->color();
@@ -1008,9 +1022,9 @@ sub end {
 # write to a log file, for debugging
 sub _elog {
 	my ($mesg) = @_;
-	open(F, ">>", "elog.log");
-	print F "$mesg\n";
-	close(F);
+	open(my $F, ">>", "elog.log") or die "Could not open debug log file: $!";
+	print $F "$mesg\n";
+	close($F);
 }
 
 1;

@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 use Curses;
 use Term::Animation;
+use Data::Dumper qw(Dumper);
 
 =head1 NAME
 
@@ -148,7 +149,8 @@ sub new {
 	($self->{SHAPE}, $self->{HEIGHT}, $self->{WIDTH}) = _build_shape($self, $p{'shape'});
 	($self->{X}, $self->{Y}, $self->{Z})	= defined($p{'position'})	? @{$p{'position'}}		: ( 0, 0, 0 );
 	$self->{DEF_COLOR}		= defined($p{'default_color'})	? Term::Animation::color_id($p{'default_color'}) : 'w';
-	_build_mask($self, $p{'color'});
+	$self->{DEF_COLOR2}		= 'u'; # undefined
+	_build_mask($self, $p{'color'}, $p{'color2'});
 
 	# collision detection
 	$self->{DEPTH}		= defined($p{'depth'})        ? $p{'depth'}        : 1;
@@ -703,12 +705,12 @@ sub kill {
 
 # create a color mask for an entity
 sub _build_mask {
-	my ($self, $shape) = @_;
+	my ($self, $shape, $shape2) = @_;
 
 	my @amask;
 	my $mask = ();
 
-	# store the color mask in case we are asked to 
+	# store the color mask in case we are asked to
 	# change the default color later
 	if(defined($shape)) {
 		$self->{SUPPLIED_MASK} = $shape;
@@ -754,9 +756,55 @@ sub _build_mask {
 			}
 		}
 	}
+
+	_build_mask2($self, \@amask, $shape2);
 	$self->{ATTR} = \@amask;
 }
 
+# create a color mask for an entity
+sub _build_mask2 {
+	my ($self, $amask, $shape2) = @_;
+
+	# store the color mask in case we are asked to
+	# change the default color later
+	return if !defined $shape2;
+	$self->{SUPPLIED_MASK2} = $shape2;
+	my @res = _build_shape($self, $shape2);
+	my $mask2 = $res[0];
+	# if we were given fewer mask frames
+	# than we have animation frames, then
+	# repeat what we got to make up the difference.
+	# this allows the user to pass a single color
+	# mask that is the same for every animation frame
+	if($#{$mask2} < $#{$self->{SHAPE}}) {
+		my $diff = $#{$self->{SHAPE}} - $#{$mask2};
+		for (1..$diff) {
+			push(@{$mask2}, $mask2->[$_ - 1]);
+		}
+	}
+
+	for my $f (0..$#{$self->{SHAPE}}) {
+		for my $i (0..$self->{HEIGHT}-1) {
+			for my $j (0..$self->{WIDTH}-1) {
+				if(!defined($mask2->[$f][$i][$j]) or $mask2->[$f][$i][$j] eq ' ') {
+					$mask2->[$f][$i][$j] = $self->{DEF_COLOR2};
+				} elsif(defined($mask2->[$f][$i][$j])) {
+					# make sure it's a valid color
+					unless(Term::Animation::is_valid_color2($mask2->[$f][$i][$j]) ) {
+						carp("Invalid color2 mask: $mask2->[$f][$i][$j]");
+						$mask2->[$f][$i][$j] = undef;
+					}
+				}
+
+				# capital letters indicate bold colors
+				if($mask2->[$f][$i][$j] =~ /^(?:i)$/) {
+					$amask->[$f][$i][$j] |= Curses::A_ITALIC;
+				}
+				$self->{COLOR2}->[$f][$i][$j] = $mask2->[$f][$i][$j];
+			}
+		}
+	}
+}
 # automatically make whitespace appearing on a line before the first non-
 # whitespace character transparent
 sub _auto_trans {
@@ -776,6 +824,14 @@ sub _auto_trans {
 		return _trans_fill_string($shape, $char);
 	}
 
+}
+
+# write to a log file, for debugging
+sub _elog {
+	my ($mesg) = @_;
+	open(my $F, ">>", "elog.log") or die "Could not open debug log file: $!";
+	print $F "$mesg\n";
+	close($F);
 }
 
 # called by _auto_trans to handle a single string
