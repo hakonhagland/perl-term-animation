@@ -33,7 +33,7 @@ into the animation as an 'animation object'. An animation object can
 have a callback routine that controls the position and frame of the
 object.
 
-If the constructor is passed no arguments, it assumes that it is 
+If the constructor is passed no arguments, it assumes that it is
 running full screen, and behaves accordingly. Alternatively, it can
 accept a curses window (created with the Curses I<newwin> call) as an
 argument, and will draw into that window.
@@ -101,6 +101,7 @@ Everything else would be identical to the previous example.
 our $VERSION = '2.6';
 
 our ($color_names, $color_ids) = _color_list();
+our ($color_names2, $color_ids2) = _color_list2();
 
 =item I<new>
 
@@ -127,6 +128,7 @@ sub new {
 	$self->{TRACK_FRAMERATE} = 1;
 	$self->{FRAMERATE} = 0;
 	$self->{FRAMES_THIS_SECOND} = 0;
+	$self->{COLOR_INPUT_METHOD} = 1;
 
 	$self->{WIN} = shift;
 	if(defined($self->{WIN})) {
@@ -182,7 +184,7 @@ in L<Term::Animation::Entity> for details on calling this method.
 =cut
 sub new_entity {
 	my ($self, @ent_args) = @_;
-	my $entity = Term::Animation::Entity->new(@ent_args);
+	my $entity = Term::Animation::Entity->new(@ent_args, TERM_ANIM =>$self );
 	$self->add_entity($entity);
 	return $entity;
 }
@@ -222,13 +224,25 @@ sub _color_list {
 	return (\%color_n, \%color_i);
 }
 
+# create lists mapping full color names (eg. 'blue') and
+# single character color ids (eg. 'b')
+sub _color_list2 {
+	my $color_names_arr = _color2_names();
+	my %color_n =  map { my $id = ord($_) - ord("a"); "color$id" => $_ } @$color_names_arr;
+	my %color_i;
+	for (keys %color_n) {
+		$color_i{$color_n{$_}} = $_;
+	}
+
+	return (\%color_n, \%color_i);
+}
+
 # build a list of every color combination for our current
 # background color
 sub _set_colors {
 	my ($self) = @_;
 
 	my $cid = 1;
-
 	my $bg = eval "Curses::COLOR_$self->{BG}";
 
 	for my $f ('w', 'r', 'g', 'b', 'c', 'm', 'y', 'k') {
@@ -237,13 +251,25 @@ sub _set_colors {
 		$self->{COLORS}{$f} = COLOR_PAIR($cid);
 		$cid++;
 	}
-	for my $c ('a'..'z') {
-		my $cidx = ord($c)-97;
+}
+
+# build a list of every color combination for our current
+# background color
+sub _set_colors2 {
+	my ($self) = @_;
+
+	my $cid = 1;
+	my $bg = eval "Curses::COLOR_$self->{BG}";
+	my $color_names_arr = _color2_names();
+	for my $c (@$color_names_arr) {
+		my $cidx = ord($c)-ord("a");
 		init_pair($cid, $cidx, $bg);
-		$self->{COLOR2}{$c} = COLOR_PAIR($cid);
+		$self->{COLORS}{$c} = COLOR_PAIR($cid);
 		$cid++;
 	}
 }
+
+sub _color2_names() { ['a'..'z'] }
 
 =item I<color_name>
 
@@ -263,21 +289,66 @@ sub color_name {
 	}
 }
 
+=item I<color_name2>
+
+  $name = $anim->color_name2( $color );
+
+Returns the full name of a color, given either a full
+name or a single character abbreviation.
+
+=cut
+sub color_name2 {
+	my ($color) = @_;
+	if(defined($color_names2->{$color})) {
+		return $color_names2->{$color};
+	} else {
+		carp("Attempt to allocate unknown color: $color");
+		return undef;
+	}
+}
+
 =item I<color_id>
 
   $id = $anim->color_id( $color );
 
-Returns the single character abbreviation for a color, 
+Returns the single character abbreviation for a color,
 given either a full name or abbreviation.
 
 =cut
+
 sub color_id {
+	my $self = shift;
+
 	my ($color) = @_;
-	if(defined($color_ids->{$color})) {
-		return $color_ids->{$color};
-	} else {
-		carp("Attempt to allocate unknown color: $color");
-		return undef;
+
+	if ($self->{COLOR_INPUT_METHOD} == 1) {
+		if(defined($color_ids->{$color})) {
+			return $color_ids->{$color};
+		}
+	}
+	elsif($self->{COLOR_INPUT_METHOD} == 2) {
+		if(defined($color_ids2->{$color})) {
+			return $color_ids2->{$color};
+		}
+	}
+	else {
+		croak "Unrecognized color input method";
+	}
+
+	carp("Attempt to allocate unknown color: $color");
+	return undef;
+}
+
+sub default_color {
+	my $self = shift;
+	if ($self->{COLOR_INPUT_METHOD} == 1) {
+		return "w";
+	}
+	elsif($self->{COLOR_INPUT_METHOD} == 2) {
+		return "f";
+	}
+	else {
+		croak "Unrecognized color input method";
 	}
 }
 
@@ -290,20 +361,18 @@ or a valid color id ('b').
 
 =cut
 sub is_valid_color {
-	my ($color) = @_;
-	return(defined($color_ids->{$color}));
-}
+	my $self = shift;
 
-=item I<is_valid_color2>
-  my $is_valid = $anim->is_valid_color2($color2_name);
-Returns true if the supplied string is a valid color2 name ('i')
-or a valid color2 id ('i').
-=cut
-sub is_valid_color2 {
 	my ($color) = @_;
-	#return(defined($color2_ids->{$color}));
-	return $color =~ /^[a-z]$/ ? 1 : 0;
-
+	if ($self->{COLOR_INPUT_METHOD} == 1) {
+		return(defined($color_ids->{$color}));
+	}
+	elsif($self->{COLOR_INPUT_METHOD} == 2) {
+		return(defined($color_ids2->{$color}));
+	}
+	else {
+		croak "Unrecognized color input method";
+	}
 }
 
 =item I<color>
@@ -312,19 +381,43 @@ sub is_valid_color2 {
   $anim->color($new_state);
 
 Enable or disable ANSI color. This MUST be called immediately after creating
-the animation object if you want color, because the Curses start_color call must 
+the animation object if you want color, because the Curses start_color call must
 be made immediately. You can then turn color on and off whenever you want.
 
 =cut
 sub color {
 	my $self = shift;
+	$self->{COLOR_INPUT_METHOD} = 1;
+	return $self->_color(\&set_colors, @_);
+}
+
+=item I<color2>
+
+  my $state = $anim->color2();
+  $anim->color2($new_state);
+
+Enable or disable ANSI color. This MUST be called immediately after creating
+the animation object if you want color, because the Curses start_color call must
+be made immediately. You can then turn color on and off whenever you want.
+
+=cut
+
+sub color2 {
+	my $self = shift;
+	$self->{COLOR_INPUT_METHOD} = 2;
+	return $self->_color(\&_set_colors2, @_);
+}
+
+sub _color {
+	my $self = shift;
+	my $set_color_callback = shift;
 	if(@_) {
 		my $enable = shift;
 		if($enable != $self->{COLOR_ENABLED}) {
 			if($enable) {
 				start_color();
 				unless(defined($self->{BG})) { $self->{BG} = 'BLACK'; }
-				$self->_set_colors();
+				$set_color_callback->($self);
 				$self->{WIN}->bkgdset($self->{COLORS}{'w'});
 			}
 			$self->{COLOR_ENABLED} = $enable;
@@ -550,16 +643,8 @@ sub _draw_entity {
 
 	# a few temporary variables to make the code below easier to read
 	my $shape   = $entity->{SHAPE}[$entity->{CURR_FRAME}];
-	my $colors;
-	my $fg;
-	if (defined $self->{COLOR2}) {
-		$colors = $self->{COLOR2};
-		$fg = $entity->{COLOR2}[$entity->{CURR_FRAME}];
-	}
-	else {
-		$colors = $self->{COLORS};
-		$fg = $entity->{COLOR}[$entity->{CURR_FRAME}];
-	}
+	my $colors = $self->{COLORS};
+	my $fg = $entity->{COLOR}[$entity->{CURR_FRAME}];
 	my $attrs   = $entity->{ATTR}[$entity->{CURR_FRAME}];
 	my ($x, $y) = ($entity->{'X'}, $entity->{'Y'});
 	my ($w, $h) = ($self->{WIDTH}, $self->{HEIGHT});
@@ -843,7 +928,7 @@ Given beginning and end points, this will return a path for the
 entity to follow that can be given to the default callback routine,
 I<move_entity>. The first set of x,y,z coordinates are the point
 the entity will begin at, the second set is the point the entity
-will end at. 
+will end at.
 
 You can optionally supply a list of frames to cycle through. The list
 will be repeated as many times as needed to finish the path. If no
@@ -940,7 +1025,7 @@ sub _do_callbacks {
 
 	foreach my $entity (keys %{$self->{ENTITIES}}) {
 		my $ent = $self->{ENTITIES}{$entity};
-		
+
 		# check for methods to automatically die
 		if(defined($ent->{'DIE_TIME'}) and $ent->{'DIE_TIME'} <= time()) {
 			del_entity($self, $entity); next;
@@ -979,7 +1064,7 @@ sub _do_callbacks {
 			}
 			$ent->{Z} = defined($z) ? $z : $ent->{Z};
 			$ent->{CURR_FRAME} = defined($f) ? $f : $ent->{CURR_FRAME};
-		
+
 		}
 	}
 }
@@ -1021,7 +1106,7 @@ sub _collision_handlers {
 
 Run the Curses endwin function to get your terminal back to its
 normal mode. This is called automatically when the object is
-destroyed if the animation is running full screen (if you 
+destroyed if the animation is running full screen (if you
 did not pass an existing Curses window to the constructor).
 
 =cut
@@ -1074,10 +1159,10 @@ around the screen:
       if($last_move eq 'x') {
           $entity->callback_args('y');
 	  # move by -1, 0 or 1
-	  $y += int(rand(3)) - 1; 
+	  $y += int(rand(3)) - 1;
       } else {
           $entity->callback_args('x');
-	  $x += int(rand(3)) - 1; 
+	  $x += int(rand(3)) - 1;
       }
 
       # return the absolute x,y,z coordinates to move to

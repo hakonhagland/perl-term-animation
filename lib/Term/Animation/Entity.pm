@@ -6,6 +6,7 @@ use warnings;
 use Carp;
 use Curses;
 use Term::Animation;
+use Data::Dumper qw(Dumper);
 
 =head1 NAME
 
@@ -79,7 +80,7 @@ represent a single sprite on the screen.
 	entity dies, this entity should die as well. Default: undef
 
   die_time < INTEGER >
-  	The time at which this entity should be killed. This 
+    The time at which this entity should be killed. This
 	should be a UNIX epoch time, as returned
 	by I<time>.  Default: undef
 
@@ -128,8 +129,9 @@ sub new {
 	my %p = @_;
 
 	# default sprite is a single asterisk
-	unless(defined($p{'shape'})) { $p{'shape'} = '*'; } 
+	unless(defined($p{'shape'})) { $p{'shape'} = '*'; }
 
+	$self->{TERM_ANIM} = $p{TERM_ANIM};
 	# if no name is supplied, generate a random one
 	if(defined($p{'name'})) {
 		$self->{NAME} = $p{'name'};
@@ -147,9 +149,10 @@ sub new {
 	if($self->{AUTO_TRANS}) { $p{'shape'} = _auto_trans($p{'shape'}, $self->{TRANSPARENT}); }
 	($self->{SHAPE}, $self->{HEIGHT}, $self->{WIDTH}) = _build_shape($self, $p{'shape'});
 	($self->{X}, $self->{Y}, $self->{Z})	= defined($p{'position'})	? @{$p{'position'}}		: ( 0, 0, 0 );
-	$self->{DEF_COLOR}		= defined($p{'default_color'})	? Term::Animation::color_id($p{'default_color'}) : 'w';
-	$self->{DEF_COLOR2} = "f"; # white
-	_build_mask($self, $p{'color'}, $p{'color2'});
+	$self->{DEF_COLOR}	= defined($p{'default_color'})
+			? $self->{TERM_ANIM}->color_id($p{'default_color'})
+			: $self->{TERM_ANIM}->default_color();
+	_build_mask($self, $p{color}); # $self is not blessed yet, so pass explicitly
 
 	# collision detection
 	$self->{DEPTH}		= defined($p{'depth'})        ? $p{'depth'}        : 1;
@@ -524,7 +527,7 @@ sub die_entity {
 sub follow_entity {
 	my $self = shift;
 	if(@_ && defined($self->animation)) {
-		
+
 		my ($ent) = @_;
 
 		if(defined($ent)) {
@@ -549,9 +552,9 @@ sub follow_offset {
 =item I<shape>
 
   $entity->shape($new_shape);
- 
+
 Set the sprite image for the entity. See the C<shape> argument
-to I<new> for details. 
+to I<new> for details.
 
 =cut
 sub shape {
@@ -606,8 +609,8 @@ sub default_color {
 	my $self = shift;
 	if(@_) {
 		my $color = shift;
-		if(is_valid_color($color)) {
-			$self->{DEF_COLOR} = color_id($color);
+		if($self->is_valid_color($color)) {
+			$self->{DEF_COLOR} = $self->{TERM_ANIM}->color_id($color);
 			$self->_build_mask();
 		} else {
 			carp("Invalid color supplied: $color");
@@ -639,9 +642,9 @@ after you have done whatever other processing you want to do.
 
   sub my_callback {
     my ($entity, $animation) = @_;
-    
+
     # do something here
-    
+
     return $entity->move_object($animation);
 
   }
@@ -704,12 +707,25 @@ sub kill {
 
 # create a color mask for an entity
 sub _build_mask {
-	my ($self, $shape, $shape2) = @_;
+	my $self = shift;
+	if ($self->{TERM_ANIM}{COLOR_INPUT_METHOD} == 1) {
+		_build_mask1($self, @_);
+	}
+	elsif($self->{TERM_ANIM}{COLOR_INPUT_METHOD} == 2) {
+		return _build_mask2($self, @_);
+	}
+	else {
+		croak "Unrecognized color input method";
+	}
+}
+
+sub _build_mask1 {
+	my ($self, $shape) = @_;
 
 	my @amask;
 	my $mask = ();
 
-	# store the color mask in case we are asked to 
+	# store the color mask in case we are asked to
 	# change the default color later
 	if(defined($shape)) {
 		$self->{SUPPLIED_MASK} = $shape;
@@ -739,7 +755,7 @@ sub _build_mask {
 					$mask->[$f][$i][$j] = $self->{DEF_COLOR};
 				} elsif(defined($mask->[$f][$i][$j])) {
 					# make sure it's a valid color
-					unless(Term::Animation::is_valid_color($mask->[$f][$i][$j]) ) {
+					unless($self->{TERM_ANIM}->is_valid_color($mask->[$f][$i][$j]) ) {
 						carp("Invalid color mask: $mask->[$f][$i][$j]");
 						$mask->[$f][$i][$j] = undef;
 					}
@@ -755,18 +771,18 @@ sub _build_mask {
 			}
 		}
 	}
-	_build_mask2($self, \@amask, $shape2);
 	$self->{ATTR} = \@amask;
 }
 
 # create a color mask for an entity
 sub _build_mask2 {
-	my ($self, $amask, $shape2) = @_;
+	my ($self, $shape2) = @_;
 
 	# store the color mask in case we are asked to
 	# change the default color later
 	return if !defined $shape2;
 	$self->{SUPPLIED_MASK2} = $shape2;
+	my @amask2;
 	my @res = _build_shape($self, $shape2);
 	my $mask2 = $res[0];
 	# if we were given fewer mask frames
@@ -788,15 +804,17 @@ sub _build_mask2 {
 					$mask2->[$f][$i][$j] = $self->{DEF_COLOR2};
 				} elsif(defined($mask2->[$f][$i][$j])) {
 					# make sure it's a valid color
-					unless(Term::Animation::is_valid_color2($mask2->[$f][$i][$j]) ) {
+					unless($self->{TERM_ANIM}->is_valid_color($mask2->[$f][$i][$j]) ) {
 						carp("Invalid color2 mask: $mask2->[$f][$i][$j]");
 						$mask2->[$f][$i][$j] = undef;
 					}
 				}
-				$self->{COLOR2}->[$f][$i][$j] = $mask2->[$f][$i][$j];
+				$self->{COLOR}->[$f][$i][$j] = $mask2->[$f][$i][$j];
+				# $amask2[$f][$i][$j] = Curses::A_NORMAL;
 			}
 		}
 	}
+	$self->{ATTR} = \@amask2;
 }
 
 # automatically make whitespace appearing on a line before the first non-
