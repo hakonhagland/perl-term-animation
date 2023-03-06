@@ -801,7 +801,7 @@ sub _build_mask2 {
 		for my $i (0..$self->{HEIGHT}-1) {
 			for my $j (0..$self->{WIDTH}-1) {
 				if(!defined($mask2->[$f][$i][$j]) or $mask2->[$f][$i][$j] eq ' ') {
-					$mask2->[$f][$i][$j] = $self->{DEF_COLOR2};
+					$mask2->[$f][$i][$j] = $self->{DEF_COLOR};
 				} elsif(defined($mask2->[$f][$i][$j])) {
 					# make sure it's a valid color
 					unless($self->{TERM_ANIM}->is_valid_color($mask2->[$f][$i][$j]) ) {

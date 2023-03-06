@@ -388,7 +388,7 @@ be made immediately. You can then turn color on and off whenever you want.
 sub color {
 	my $self = shift;
 	$self->{COLOR_INPUT_METHOD} = 1;
-	return $self->_color(\&set_colors, @_);
+	return $self->_color(\&_set_colors, @_);
 }
 
 =item I<color2>
