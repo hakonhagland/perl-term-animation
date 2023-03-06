@@ -268,7 +268,13 @@ sub _set_colors2 {
 	}
 }
 
-sub _color2_names() { ['a'..'z'] }
+sub _color2_names() { [
+	'a'..'z',
+	'A'..'Z',
+	'0'..'9',
+	'_',',','.','-','+','*',':',';','?','/','(',')','!','@','#','$','%','&','=','"','`'
+	]
+}
 
 =item I<color_name>
 
@@ -653,7 +659,6 @@ sub _draw_entity {
 	my $win     = $self->{WIN};
 	my $color_enabled = $self->{COLOR_ENABLED};
 	my $attr;
-
 	for my $i (0..$#{$shape}) {
 		my $y_pos = $y+$i;
 

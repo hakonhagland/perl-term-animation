@@ -705,21 +705,7 @@ sub kill {
 	}
 }
 
-# create a color mask for an entity
 sub _build_mask {
-	my $self = shift;
-	if ($self->{TERM_ANIM}{COLOR_INPUT_METHOD} == 1) {
-		_build_mask1($self, @_);
-	}
-	elsif($self->{TERM_ANIM}{COLOR_INPUT_METHOD} == 2) {
-		return _build_mask2($self, @_);
-	}
-	else {
-		croak "Unrecognized color input method";
-	}
-}
-
-sub _build_mask1 {
 	my ($self, $shape) = @_;
 
 	my @amask;
@@ -762,7 +748,13 @@ sub _build_mask1 {
 				}
 
 				# capital letters indicate bold colors
-				if($mask->[$f][$i][$j] =~ /[A-Z]/) {
+				my $bold = 0;
+				if ($self->{TERM_ANIM}{COLOR_INPUT_METHOD} == 1) {
+					if($mask->[$f][$i][$j] =~ /[A-Z]/) {
+						$bold = 1;
+					}
+				}
+				if ($bold) {
 					$self->{COLOR}->[$f][$i][$j] = lc($mask->[$f][$i][$j]);
 					$amask[$f][$i][$j] = Curses::A_BOLD;
 				} else {
@@ -772,49 +764,6 @@ sub _build_mask1 {
 		}
 	}
 	$self->{ATTR} = \@amask;
-}
-
-# create a color mask for an entity
-sub _build_mask2 {
-	my ($self, $shape2) = @_;
-
-	# store the color mask in case we are asked to
-	# change the default color later
-	return if !defined $shape2;
-	$self->{SUPPLIED_MASK2} = $shape2;
-	my @amask2;
-	my @res = _build_shape($self, $shape2);
-	my $mask2 = $res[0];
-	# if we were given fewer mask frames
-	# than we have animation frames, then
-	# repeat what we got to make up the difference.
-	# this allows the user to pass a single color
-	# mask that is the same for every animation frame
-	if($#{$mask2} < $#{$self->{SHAPE}}) {
-		my $diff = $#{$self->{SHAPE}} - $#{$mask2};
-		for (1..$diff) {
-			push(@{$mask2}, $mask2->[$_ - 1]);
-		}
-	}
-
-	for my $f (0..$#{$self->{SHAPE}}) {
-		for my $i (0..$self->{HEIGHT}-1) {
-			for my $j (0..$self->{WIDTH}-1) {
-				if(!defined($mask2->[$f][$i][$j]) or $mask2->[$f][$i][$j] eq ' ') {
-					$mask2->[$f][$i][$j] = $self->{DEF_COLOR};
-				} elsif(defined($mask2->[$f][$i][$j])) {
-					# make sure it's a valid color
-					unless($self->{TERM_ANIM}->is_valid_color($mask2->[$f][$i][$j]) ) {
-						carp("Invalid color2 mask: $mask2->[$f][$i][$j]");
-						$mask2->[$f][$i][$j] = undef;
-					}
-				}
-				$self->{COLOR}->[$f][$i][$j] = $mask2->[$f][$i][$j];
-				# $amask2[$f][$i][$j] = Curses::A_NORMAL;
-			}
-		}
-	}
-	$self->{ATTR} = \@amask2;
 }
 
 # automatically make whitespace appearing on a line before the first non-
@@ -867,7 +816,6 @@ sub _build_shape {
 	my @shape_array = ();
 	my $height = 0;
 	my $width = 0;
-
 	if(ref($shape) eq 'ARRAY') {
 		for my $i (0..$#{$shape}) {
 			my $this_height = 0;
