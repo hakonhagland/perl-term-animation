@@ -233,7 +233,6 @@ sub _color_list2 {
 	for (keys %color_n) {
 		$color_i{$color_n{$_}} = $_;
 	}
-
 	return (\%color_n, \%color_i);
 }
 
@@ -328,7 +327,8 @@ sub color_id {
 	}
 	elsif($self->{COLOR_INPUT_METHOD} == 2) {
 		if(defined($color_ids2->{$color})) {
-			return $color_ids2->{$color};
+			#return $color_ids2->{$color};
+			return $color;
 		}
 	}
 	else {
